@@ -67,8 +67,9 @@ int main(int argc, char *argv[])
     }
   }
 
-  Socket socket(AF_INET, type, 0);
+  Socket socket;
   try {
+    socket.init(AF_INET, type, 0);
     socket.connect(addr, port);
     std::string msg;
     while (true) {

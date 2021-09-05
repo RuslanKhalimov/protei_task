@@ -65,9 +65,9 @@ int main(int argc, char *argv[])
     }
   }
 
-  Server server(type);
+  AsyncServer server;
   try {
-    server.start(addr, port);
+    server.start(addr, port, type);
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
   }

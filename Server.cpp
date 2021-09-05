@@ -5,25 +5,26 @@
 #include <iostream>
 
 
-Server::Server(Socket::Type type)
-    : socket_(Socket(AF_INET, type, 0))
+void Server::initSocket(const std::string &addr, int port, Socket::Type type)
 {
-}
-
-void Server::start(const std::string &addr, int port)
-{
+  socket_.init(AF_INET, type, 0);
   socket_.bind(addr, port);
   socket_.listen(MAX_CONNECTIONS);
+}
+
+void Server::start(const std::string &addr, int port, Socket::Type type)
+{
+  initSocket(addr, port, type);
 
   while (true) {
-    Socket clientSocket = socket_.accept();
+    std::shared_ptr<Socket> clientSocket = socket_.accept();
     while (true) {
-      std::string msg = clientSocket.recv();
+      std::string msg = clientSocket->recv();
       std::cout << msg << std::endl;
       if (msg == "stop" || msg.empty()) {
         break;
       }
-      clientSocket.send(handleMessage(msg));
+      clientSocket->send(handleMessage(msg));
     }
   }
 }
@@ -70,4 +71,32 @@ std::string Server::generateResponse(std::vector<uint64_t> &numbers)
   response << std::endl << sum;
 
   return response.str();
+}
+
+void AsyncServer::start(const std::string &addr, int port, Socket::Type type)
+{
+  initSocket(addr, port, type);
+  socket_.setNonBlocking();
+  epoll_.init(socket_.getFd());
+
+  while (true) {
+    int eventFd = epoll_.getNextEventFd();
+    if (eventFd == socket_.getFd()) { // new connection
+      std::shared_ptr<Socket> clientSocket = socket_.accept();
+      clientSocket->setNonBlocking();
+      epoll_.addSocketFd(clientSocket->getFd());
+      clients_.insert({clientSocket->getFd(), clientSocket});
+    }
+    else { // message
+      std::shared_ptr<Socket> clientSocket = clients_.at(eventFd);
+      std::string msg = clientSocket->recv();
+      std::cout << msg << std::endl;
+      if (msg == "stop" || msg.empty()) {
+        epoll_.removeSocketFd(eventFd);
+      }
+      else {
+        clientSocket->send(handleMessage(msg));
+      }
+    }
+  }
 }
