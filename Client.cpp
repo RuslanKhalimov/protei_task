@@ -15,7 +15,7 @@ void TcpClient::start(const std::string &addr, int port)
 
   std::string msg;
   while (true) {
-    std::cin >> msg;
+    getline(std::cin, msg);
     Socket::send(sockfd_, msg);
     if (msg == "stop") {
       break;
@@ -36,7 +36,7 @@ void UdpClient::start(const std::string &addr, int port)
 
   std::string msg;
   while (true) {
-    std::cin >> msg;
+    getline(std::cin, msg);
     Socket::sendto(sockfd_, msg, &serverAddr_, addrlen_);
     if (msg == "stop") {
       break;
