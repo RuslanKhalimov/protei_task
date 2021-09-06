@@ -1,5 +1,4 @@
-#include "Socket.h"
-#include <sys/socket.h>
+#include "Client.h"
 #include <iostream>
 #include <getopt.h>
 
@@ -19,7 +18,7 @@ int main(int argc, char *argv[])
 {
   std::string addr;
   int port;
-  Socket::Type type;
+  std::string type;
 
   static struct option longOptions[] = {
       {"help", 0, 0, 'h'},
@@ -51,14 +50,8 @@ int main(int argc, char *argv[])
         }
         break;
       case 't':
-        std::string arg = std::string(optarg);
-        if (arg == "tcp") {
-          type = Socket::TCP;
-        }
-        else if (arg == "udp") {
-          type = Socket::UDP;
-        }
-        else {
+        type = std::string(optarg);
+        if (type != "tcp" && type != "udp") {
           std::cout << "Unknown type parameter : " << type << std::endl;
           std::cout << "Supported type : tcp, udp" << std::endl;
           exit(1);
@@ -67,19 +60,15 @@ int main(int argc, char *argv[])
     }
   }
 
-  Socket socket;
+  std::unique_ptr<Client> client = nullptr;
+  if (type == "tcp") {
+    client = std::make_unique<TcpClient>();
+  }
+  else {
+    client = std::make_unique<UdpClient>();
+  }
   try {
-    socket.init(AF_INET, type, 0);
-    socket.connect(addr, port);
-    std::string msg;
-    while (true) {
-      std::cin >> msg;
-      socket.send(msg);
-      if (msg == "stop") {
-        break;
-      }
-      std::cout << socket.recv() << std::endl;
-    }
+    client->start(addr, port);
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
   }

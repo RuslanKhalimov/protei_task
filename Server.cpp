@@ -5,38 +5,21 @@
 #include <iostream>
 
 
-void Server::initSocket(const std::string &addr, int port, Socket::Type type)
+Server::~Server()
 {
-  socket_.init(AF_INET, type, 0);
-  socket_.bind(addr, port);
-  socket_.listen(MAX_CONNECTIONS);
-}
-
-void Server::start(const std::string &addr, int port, Socket::Type type)
-{
-  initSocket(addr, port, type);
-
-  while (true) {
-    std::shared_ptr<Socket> clientSocket = socket_.accept();
-    while (true) {
-      std::string msg = clientSocket->recv();
-      std::cout << msg << std::endl;
-      if (msg == "stop" || msg.empty()) {
-        break;
-      }
-      clientSocket->send(handleMessage(msg));
-    }
+  if (sockfd_ != -1) {
+    Socket::close(sockfd_);
   }
 }
 
-std::string Server::handleMessage(const std::string &msg)
+std::string Server::handleMessage(const std::string& msg)
 {
   std::vector<uint64_t> numbers;
   parseMessage(msg, numbers);
   return generateResponse(numbers);
 }
 
-void Server::parseMessage(const std::string &msg, std::vector<uint64_t> &numbers)
+void Server::parseMessage(const std::string& msg, std::vector<uint64_t>& numbers)
 {
   uint64_t nextNum = 0;
   bool foundNumber = false;
@@ -55,7 +38,7 @@ void Server::parseMessage(const std::string &msg, std::vector<uint64_t> &numbers
   }
 }
 
-std::string Server::generateResponse(std::vector<uint64_t> &numbers)
+std::string Server::generateResponse(std::vector<uint64_t>& numbers)
 {
   std::stringstream response;
 
@@ -73,30 +56,59 @@ std::string Server::generateResponse(std::vector<uint64_t> &numbers)
   return response.str();
 }
 
-void AsyncServer::start(const std::string &addr, int port, Socket::Type type)
+void TcpServer::start(const std::string& addr, int port)
 {
-  initSocket(addr, port, type);
-  socket_.setNonBlocking();
-  epoll_.init(socket_.getFd());
+  initSocket(addr, port);
+  Socket::setNonBlocking(sockfd_);
+  epoll_.init(sockfd_);
 
   while (true) {
     int eventFd = epoll_.getNextEventFd();
-    if (eventFd == socket_.getFd()) { // new connection
-      std::shared_ptr<Socket> clientSocket = socket_.accept();
-      clientSocket->setNonBlocking();
-      epoll_.addSocketFd(clientSocket->getFd());
-      clients_.insert({clientSocket->getFd(), clientSocket});
+    if (eventFd == sockfd_) { // new connection
+      int clientFd = Socket::accept(sockfd_);
+      Socket::setNonBlocking(clientFd);
+      epoll_.addSocketFd(clientFd);
     }
     else { // message
-      std::shared_ptr<Socket> clientSocket = clients_.at(eventFd);
-      std::string msg = clientSocket->recv();
+      int clientFd = eventFd;
+      std::string msg = Socket::recv(clientFd);
       std::cout << msg << std::endl;
       if (msg == "stop" || msg.empty()) {
-        epoll_.removeSocketFd(eventFd);
+        epoll_.removeSocketFd(clientFd);
+        Socket::close(clientFd);
       }
       else {
-        clientSocket->send(handleMessage(msg));
+        Socket::send(clientFd, handleMessage(msg));
       }
     }
   }
+}
+
+void TcpServer::initSocket(const std::string& addr, int port)
+{
+  sockfd_ = Socket::socket(AF_INET, SOCK_STREAM, 0);
+  Socket::bind(sockfd_, addr, port);
+  Socket::listen(sockfd_, MAX_CONNECTIONS);
+}
+
+void UdpServer::start(const std::string &addr, int port)
+{
+  initSocket(addr, port);
+
+  struct sockaddr clientAddr{};
+  socklen_t addrlen = sizeof(sockaddr);
+
+  while (true) {
+    std::string msg = Socket::recvfrom(sockfd_, &clientAddr, &addrlen);
+    std::cout << msg << std::endl;
+    if (msg != "stop" && !msg.empty()) {
+      Socket::sendto(sockfd_, handleMessage(msg), &clientAddr, addrlen);
+    }
+  }
+}
+
+void UdpServer::initSocket(const std::string& addr, int port)
+{
+  sockfd_ = Socket::socket(AF_INET, SOCK_DGRAM, 0);
+  Socket::bind(sockfd_, addr, port);
 }

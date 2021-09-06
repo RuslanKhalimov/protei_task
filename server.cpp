@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 {
   std::string addr;
   int port;
-  Socket::Type type;
+  std::string type;
 
   static struct option longOptions[] = {
       {"help", 0, 0, 'h'},
@@ -49,14 +49,8 @@ int main(int argc, char *argv[])
         }
         break;
       case 't':
-        std::string arg = std::string(optarg);
-        if (arg == "tcp") {
-          type = Socket::TCP;
-        }
-        else if (arg == "udp") {
-          type = Socket::UDP;
-        }
-        else {
+        type = std::string(optarg);
+        if (type != "tcp" && type != "udp") {
           std::cout << "Unknown type parameter : " << type << std::endl;
           std::cout << "Supported type : tcp, udp" << std::endl;
           exit(1);
@@ -65,9 +59,15 @@ int main(int argc, char *argv[])
     }
   }
 
-  AsyncServer server;
+  std::unique_ptr<Server> server = nullptr;
+  if (type == "tcp") {
+    server = std::make_unique<TcpServer>();
+  }
+  else {
+    server = std::make_unique<UdpServer>();
+  }
   try {
-    server.start(addr, port, type);
+    server->start(addr, port);
   } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
   }
